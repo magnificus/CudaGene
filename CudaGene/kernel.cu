@@ -22,15 +22,26 @@ void unfoldAndUseDNA() {
 
 }
 
-__global__ void fitnessCalculation(int *organisms, FittingData fittingData, OUTPUT_DATA_TYPE *fitnessResults) {
+__global__ void fitnessCalculation(Organism *organisms, int lengthX, FittingData fittingData, float *fitnessResults) {
     //fitness
-    int loc = threadIdx.x;
 
-    fitnessResults[loc] = organisms[loc];
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int bw = blockDim.x;
+    int bh = blockDim.y;
+    int x = blockIdx.x * bw + tx;
+    int y = blockIdx.y * bh + ty;
+
+
+    fitnessResults[y*lengthX + x] =  y*lengthX + x; 
 
 }
 
 extern "C" void
-launch_fitnessCalculation(int numOrganisms, int *organisms, FittingData fittingData, int *fitnessResults) {
-    fitnessCalculation << <1, numOrganisms >> > (organisms, fittingData, fitnessResults);
+launch_fitnessCalculation(int numOrganisms, Organism *organisms, FittingData fittingData, float *fitnessResults) {
+    int numOrganismsX = (sqrt(numOrganisms)/8)*8;
+    int numOrganismsY = numOrganisms / numOrganismsX;
+    dim3 grid(numOrganismsX, numOrganismsY, 1);
+    dim3 block(1, 1, 1);
+    fitnessCalculation << < grid,block >> > (organisms, numOrganismsX, fittingData, fitnessResults);
 }

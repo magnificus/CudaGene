@@ -11,10 +11,7 @@
 #include "sharedData.h"
 
 extern "C" void
-launch_addkernel(int size, int* c, const int* a, const int* b);
-
-extern "C" void
-launch_fitnessCalculation(int numOrganisms, int *organisms, FittingData fittingData, int *fitnessResults);
+launch_fitnessCalculation(int numOrganisms, Organism * organisms, FittingData fittingData, float* fitnessResults);
 
 
 #define INPUT_DATA_SIZE (sizeof(INPUT_DATA_TYPE) * DATA_LENGTH)
@@ -56,8 +53,7 @@ void clearFittingData(FittingData fittingData) {
 }
 
 
-// Helper function for using CUDA to add vectors in parallel.
-cudaError_t addWithCuda(int* c, const int* a, const int* b, unsigned int size)
+cudaError_t evolve()
 {
     cudaError_t cudaStatus;
 
@@ -79,7 +75,7 @@ cudaError_t addWithCuda(int* c, const int* a, const int* b, unsigned int size)
     cudaMalloc((void**)&fittingDataOnGPU.inputData, INPUT_DATA_SIZE);
     cudaMalloc((void**)&fittingDataOnGPU.groundTruth, INPUT_DATA_SIZE);
     cudaMalloc((void**)&organismsOnGPU, ORGANISMS_SIZE);
-    cudaMalloc((void**)&fitnessResults, FITNESS_RESULT_SIZE);
+    cudaMalloc((void**)&fitnessResultsOnGPU, FITNESS_RESULT_SIZE);
 
     // copy from local memory to GPU
 
@@ -120,7 +116,7 @@ cudaError_t addWithCuda(int* c, const int* a, const int* b, unsigned int size)
     // Launch a kernel on the GPU with one thread for each element.
     //launch_addkernel(size, dev_c, dev_a, dev_b);
 
-    //launch_fitnessCalculation(NUM_ORGANISMS, nullptr, nullptr, nullptr);
+    launch_fitnessCalculation(NUM_ORGANISMS, organismsOnGPU, fittingDataOnGPU, fitnessResultsOnGPU);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -129,28 +125,28 @@ cudaError_t addWithCuda(int* c, const int* a, const int* b, unsigned int size)
         goto Error;
     }
     
-    // cudaDeviceSynchronize waits for the kernel to finish, and returns
-    // any errors encountered during the launch.
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-        goto Error;
-    }
+    cudaDeviceSynchronize();
 
     // Copy output vector from GPU buffer to host memory.
-    //cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
+    cudaMemcpy(fitnessResults, fitnessResultsOnGPU, FITNESS_RESULT_SIZE, cudaMemcpyDeviceToHost);
+
+    //printf("done");
+
+    for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
+       printf("organism %i fitness: %f\n", i, fitnessResults[i]);
     }
 
 Error:
 
+    // cleanup
     clearFittingData(fittingData);
     clearDNA(organisms);
-    //cudaFree(dev_c);
-    //cudaFree(dev_a);
-    //cudaFree(dev_b);
+    free(fitnessResults);
+
+    cudaFree(fittingDataOnGPU.inputData);
+    cudaFree(fittingDataOnGPU.groundTruth);
+    cudaFree(organismsOnGPU);
+    cudaFree(fitnessResultsOnGPU);
 
     return cudaStatus;
 }
@@ -158,21 +154,8 @@ Error:
 
 int main()
 {
-    const int arraySize = 5;
-    const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    int c[arraySize] = { 0 };
-
     // Add vectors in parallel.
-    cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addWithCuda failed!");
-        return 1;
-    }
-
-    printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-        c[0], c[1], c[2], c[3], c[4]);
-
+    cudaError_t cudaStatus = evolve();
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
     cudaStatus = cudaDeviceReset();

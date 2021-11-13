@@ -1,6 +1,7 @@
 #pragma once
 
-#define NUM_ORGANISMS 100
+// must 
+#define NUM_ORGANISMS 1000000
 
 #define DNA_LENGTH 100
 #define DNA_TYPE int
@@ -9,7 +10,6 @@
 #define OUTPUT_DATA_TYPE int
 
 #define DATA_LENGTH 100
-
 
 struct FittingData {
 	INPUT_DATA_TYPE *inputData;
