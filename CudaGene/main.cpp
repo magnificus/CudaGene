@@ -12,7 +12,12 @@
 #include <algorithm>
 #include <vector>
 
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/generate.h>
 #include <thrust/sort.h>
+#include <thrust/copy.h>
+#include <cstdlib>
 
 
 extern "C" void
@@ -95,7 +100,7 @@ cudaError_t evolve()
 
     unsigned int count = 0;
     while (true) {
-        printf("generation %u\n", count++);
+        printf("generation %u\t", count++);
 		cudaMemcpy(organismsOnGPU, organisms, ORGANISMS_SIZE, cudaMemcpyHostToDevice);
 
 		launch_fitnessCalculation(NUM_ORGANISMS, organismsOnGPU, fittingDataOnGPU, fitnessResultsOnGPU);
@@ -111,13 +116,23 @@ cudaError_t evolve()
         // retrieve the results
 		cudaMemcpy(fitnessResults, fitnessResultsOnGPU, FITNESS_RESULT_SIZE, cudaMemcpyDeviceToHost);
 
-        // sort badabongus
+        // GPU sort
+        /*thrust::host_vector<unsigned int> hostSortedFitness(sortedOrganisms);
+        thrust::device_vector<unsigned int> deviceSortedFitness = hostSortedFitness;
+        thrust::sort(deviceSortedFitness.begin(), deviceSortedFitness.end());
+        thrust::copy(deviceSortedFitness.begin(), deviceSortedFitness.end(), hostSortedFitness.begin());*/
+
+
+        //sort badabongus
         std::sort(sortedOrganisms.begin(), sortedOrganisms.end(), [&fitnessResults](const unsigned int a, const unsigned int b) {
            return fitnessResults[a] > fitnessResults[b];
             }
 		);
 
-		//for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
+        printf("Best: %f, Average: %f\n", fitnessResults[sortedOrganisms[0]], fitnessResults[sortedOrganisms[sortedOrganisms.size() / 2]]);
+
+		//for (unsigned int i = 0; i < 3; i+=sortedOrganisms.size()/3) {
+		//   printf("organism %i fitness: %f\n", sortedOrganisms[i], fitnessResults[sortedOrganisms[i]]);
 		//   printf("organism %i fitness: %f\n", sortedOrganisms[i], fitnessResults[sortedOrganisms[i]]);
 		//}
 
