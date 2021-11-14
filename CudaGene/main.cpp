@@ -9,6 +9,11 @@
 
 #include <stdio.h>
 #include "sharedData.h"
+#include <algorithm>
+#include <vector>
+
+#include <thrust/sort.h>
+
 
 extern "C" void
 launch_fitnessCalculation(int numOrganisms, Organism * organisms, FittingData fittingData, float* fitnessResults);
@@ -19,6 +24,7 @@ launch_fitnessCalculation(int numOrganisms, Organism * organisms, FittingData fi
 
 #define ORGANISMS_SIZE (sizeof(Organism) * NUM_ORGANISMS)
 #define FITNESS_RESULT_SIZE (sizeof(float) * NUM_ORGANISMS)
+#define SORTED_FITNESS_SIZE (sizeof(unsigned int) * NUM_ORGANISMS)
 
 FittingData setupFittingData() {
     // this is where you define
@@ -61,7 +67,6 @@ cudaError_t evolve()
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-        goto Error;
     }
 
     FittingData fittingData = setupFittingData();
@@ -70,6 +75,10 @@ cudaError_t evolve()
     Organism* organismsOnGPU;
     float *fitnessResults = (float*) malloc(FITNESS_RESULT_SIZE);
     float *fitnessResultsOnGPU;
+    std::vector<unsigned int> sortedOrganisms;
+    for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
+        sortedOrganisms.push_back(i);
+    }
 
     // GPU allocation
     cudaMalloc((void**)&fittingDataOnGPU.inputData, INPUT_DATA_SIZE);
@@ -82,61 +91,37 @@ cudaError_t evolve()
 
     cudaMemcpy(fittingDataOnGPU.inputData, fittingData.inputData, INPUT_DATA_SIZE, cudaMemcpyHostToDevice);
     cudaMemcpy(fittingDataOnGPU.groundTruth, fittingData.groundTruth, INPUT_DATA_SIZE, cudaMemcpyHostToDevice);
-    cudaMemcpy(organismsOnGPU, organisms, ORGANISMS_SIZE, cudaMemcpyHostToDevice);
 
 
-    /*// Allocate GPU buffers for three vectors (two input, one output)    .
+    unsigned int count = 0;
+    while (true) {
+        printf("generation %u\n", count++);
+		cudaMemcpy(organismsOnGPU, organisms, ORGANISMS_SIZE, cudaMemcpyHostToDevice);
 
-    cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
+		launch_fitnessCalculation(NUM_ORGANISMS, organismsOnGPU, fittingDataOnGPU, fitnessResultsOnGPU);
+
+		// Check for any errors launching the kernel
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		}
+		
+		cudaDeviceSynchronize();
+        
+        // retrieve the results
+		cudaMemcpy(fitnessResults, fitnessResultsOnGPU, FITNESS_RESULT_SIZE, cudaMemcpyDeviceToHost);
+
+        // sort badabongus
+        std::sort(sortedOrganisms.begin(), sortedOrganisms.end(), [&fitnessResults](const unsigned int a, const unsigned int b) {
+           return fitnessResults[a] > fitnessResults[b];
+            }
+		);
+
+		//for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
+		//   printf("organism %i fitness: %f\n", sortedOrganisms[i], fitnessResults[sortedOrganisms[i]]);
+		//}
+
     }
-
-    cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-    
-    // Copy input vectors from host memory to GPU buffers.
-    cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-    */
-
-    // Launch a kernel on the GPU with one thread for each element.
-    //launch_addkernel(size, dev_c, dev_a, dev_b);
-
-    launch_fitnessCalculation(NUM_ORGANISMS, organismsOnGPU, fittingDataOnGPU, fitnessResultsOnGPU);
-
-    // Check for any errors launching the kernel
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        goto Error;
-    }
-    
-    cudaDeviceSynchronize();
-
-    // Copy output vector from GPU buffer to host memory.
-    cudaMemcpy(fitnessResults, fitnessResultsOnGPU, FITNESS_RESULT_SIZE, cudaMemcpyDeviceToHost);
-
-    //printf("done");
-
-    for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
-       printf("organism %i fitness: %f\n", i, fitnessResults[i]);
-    }
-
-Error:
 
     // cleanup
     clearFittingData(fittingData);

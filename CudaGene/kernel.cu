@@ -18,9 +18,6 @@ launch_addkernel(int size, int *c, const int *a, const int *b) {
     addKernel << <1, size >> > (c, a, b);
 }
 
-void unfoldAndUseDNA() {
-
-}
 
 __global__ void fitnessCalculation(Organism *organisms, int lengthX, FittingData fittingData, float *fitnessResults) {
     //fitness
@@ -32,6 +29,11 @@ __global__ void fitnessCalculation(Organism *organisms, int lengthX, FittingData
     int x = blockIdx.x * bw + tx;
     int y = blockIdx.y * bh + ty;
 
+    for (unsigned int i = 0; i < DATA_LENGTH; i++) {
+        INPUT_DATA_TYPE currentData = fittingData.inputData[i]; // can be more later
+
+    }
+
 
     fitnessResults[y*lengthX + x] =  y*lengthX + x; 
 
@@ -39,7 +41,7 @@ __global__ void fitnessCalculation(Organism *organisms, int lengthX, FittingData
 
 extern "C" void
 launch_fitnessCalculation(int numOrganisms, Organism *organisms, FittingData fittingData, float *fitnessResults) {
-    int numOrganismsX = (sqrt(numOrganisms)/8)*8;
+    int numOrganismsX = sqrt(numOrganisms);
     int numOrganismsY = numOrganisms / numOrganismsX;
     dim3 grid(numOrganismsX, numOrganismsY, 1);
     dim3 block(1, 1, 1);
