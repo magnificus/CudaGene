@@ -39,7 +39,7 @@ FittingData setupFittingData() {
 
     for (unsigned int i = 0; i < DATA_LENGTH; i++) {
         toReturn.inputData[i] = i;
-        toReturn.groundTruth[i] = i * 2;
+        toReturn.groundTruth[i] = 0;
     }
     return toReturn;
 }
@@ -48,7 +48,7 @@ Organism* setupInitialDNA() {
     Organism* organisms = (Organism*)malloc(ORGANISMS_SIZE);
     for (unsigned int i = 0; i < NUM_ORGANISMS; i++) {
         for (unsigned int j = 0; j < DNA_LENGTH; j++) {
-            organisms[i].DNA[j] = 1;
+            organisms[i].DNA[j] = rand();
         }
     }
     return organisms;
@@ -63,12 +63,15 @@ void clearFittingData(FittingData fittingData) {
     free(fittingData.inputData);
 }
 
+float getRandomFloat() {
+	return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+}
+
 
 cudaError_t evolve()
 {
     cudaError_t cudaStatus;
 
-    // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
@@ -99,13 +102,16 @@ cudaError_t evolve()
 
 
     unsigned int count = 0;
+
+    srand(static_cast <unsigned> (time(0)));
+
+    // generational execution
     while (true) {
         printf("generation %u\t", count++);
 		cudaMemcpy(organismsOnGPU, organisms, ORGANISMS_SIZE, cudaMemcpyHostToDevice);
 
 		launch_fitnessCalculation(NUM_ORGANISMS, organismsOnGPU, fittingDataOnGPU, fitnessResultsOnGPU);
 
-		// Check for any errors launching the kernel
 		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess) {
 			fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
@@ -123,13 +129,55 @@ cudaError_t evolve()
         thrust::copy(deviceSortedFitness.begin(), deviceSortedFitness.end(), hostSortedFitness.begin());*/
 
 
-        //sort badabongus
+        //sort slow mode on CPU
         std::sort(sortedOrganisms.begin(), sortedOrganisms.end(), [&fitnessResults](const unsigned int a, const unsigned int b) {
-           return fitnessResults[a] > fitnessResults[b];
+           return fitnessResults[a] < fitnessResults[b];
             }
 		);
 
-        printf("Best: %f, Average: %f\n", fitnessResults[sortedOrganisms[0]], fitnessResults[sortedOrganisms[sortedOrganisms.size() / 2]]);
+        printf("Best ID: %i, Value: %f, Average Value: %f\n", sortedOrganisms[0], fitnessResults[sortedOrganisms[0]], fitnessResults[sortedOrganisms[sortedOrganisms.size() / 2]]);
+        printf("Best DNA: %i...\n", organisms[sortedOrganisms[0]].DNA[0]);
+
+        std::vector<unsigned int> killedOrganisms;
+        
+        // determine who dies
+
+        for (int i = 0; i < NUM_ORGANISMS; i++) {
+            float modifier = (float(i) / float(NUM_ORGANISMS));
+            float r = getRandomFloat();
+            if (modifier * 2.0f * CULL_RATIO > r) {
+                killedOrganisms.push_back(i);
+            }
+        }
+  //      printf("Killed lads:\n");
+		//for (unsigned int i = 0; i < killedOrganisms.size(); i++) {
+		//	printf("%i,", killedOrganisms[i]);
+		//}
+  //      printf("\n");
+
+        // repopulate
+
+        for (unsigned int i : killedOrganisms) {
+            unsigned int parent1 = rand() % (NUM_ORGANISMS);
+            unsigned int parent2 = rand() % (NUM_ORGANISMS);
+
+            // shuffle the DNA of the new organism
+            for (unsigned int j = 0; j < DNA_LENGTH; j++) {
+                float randN = getRandomFloat();
+                if (randN < MUTATION_RATIO) {
+                    organisms[sortedOrganisms[i]].DNA[j] = rand();
+                }
+                else if (randN < 0.5f) {
+                    organisms[sortedOrganisms[i]].DNA[j] = organisms[parent1].DNA[j];
+                }
+                else {
+                    organisms[sortedOrganisms[i]].DNA[j] = organisms[parent2].DNA[j];
+                }
+
+            }
+
+        }
+
 
 		//for (unsigned int i = 0; i < 3; i+=sortedOrganisms.size()/3) {
 		//   printf("organism %i fitness: %f\n", sortedOrganisms[i], fitnessResults[sortedOrganisms[i]]);

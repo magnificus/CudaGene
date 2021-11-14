@@ -11,6 +11,9 @@
 
 #define DATA_LENGTH 100
 
+#define CULL_RATIO 0.01f
+#define MUTATION_RATIO 0.001f
+
 struct FittingData {
 	INPUT_DATA_TYPE *inputData;
 	OUTPUT_DATA_TYPE *groundTruth;

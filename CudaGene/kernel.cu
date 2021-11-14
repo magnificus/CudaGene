@@ -29,13 +29,18 @@ __global__ void fitnessCalculation(Organism *organisms, int lengthX, FittingData
     int x = blockIdx.x * bw + tx;
     int y = blockIdx.y * bh + ty;
 
+    unsigned int id = y * lengthX + x;
+
+    Organism organism = organisms[id];
+    float totalFitness = 0;
+
     for (unsigned int i = 0; i < DATA_LENGTH; i++) {
         INPUT_DATA_TYPE currentData = fittingData.inputData[i]; // can be more later
-
+        OUTPUT_DATA_TYPE truth = fittingData.groundTruth[i];
+        totalFitness += abs(truth - organism.DNA[0]);
     }
 
-
-    fitnessResults[y*lengthX + x] =  y*lengthX + x; 
+    fitnessResults[id] =  totalFitness; 
 
 }
 
